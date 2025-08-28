@@ -8,8 +8,8 @@ fi
 OUTPUT_FILE=$1
 NUM_CLIENTS=$2
 
-if ! [[ "$NUM_CLIENTS" =~ ^[1-9][0-9]*$ ]]; then
-    echo "Error: Number of clients must be a positive integer"
+if ! [[ "$NUM_CLIENTS" =~ ^[0-9]+$ ]]; then
+    echo "Error: Number of clients must be a non-negative integer"
     exit 1
 fi
 
