@@ -3,9 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 	"time"
-
+	"syscall"
 	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -90,6 +91,18 @@ func PrintConfig(v *viper.Viper) {
 	)
 }
 
+func signalHandler(client *common.Client) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-sigChan
+		log.Infof("action: signal_received | signal: %v", os.Interrupt)
+		client.Close()
+		os.Exit(0)
+	}()
+}
+
 func main() {
 	v, err := InitConfig()
 	if err != nil {
@@ -111,5 +124,8 @@ func main() {
 	}
 
 	client := common.NewClient(clientConfig)
+
+	signalHandler(client)
+
 	client.StartClientLoop()
 }
