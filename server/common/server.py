@@ -12,9 +12,9 @@ class Server:
 
     def __graceful_shutdown(self, signum, frame):
         logging.info("action: graceful_shutdown | result: in_progress")
+        self._shutdown = True
         self._server_socket.close()
         logging.info("action: graceful_shutdown | result: success")
-        sys.exit(0)
 
     def run(self):
         """
@@ -28,9 +28,20 @@ class Server:
         # TODO: Modify this program to handle signal to graceful shutdown
         # the server
         signal.signal(signal.SIGINT, self.__graceful_shutdown)
-        while True:
-            client_sock = self.__accept_new_connection()
-            self.__handle_client_connection(client_sock)
+        signal.signal(signal.SIGTERM, self.__graceful_shutdown)
+
+        try:
+            while not self._shutdown:
+                try:
+                    client_sock = self.__accept_new_connection()
+                    if client_sock:
+                        self.__handle_client_connection(client_sock)
+                except OSError as e:
+                    if not self._shutdown:
+                        logging.error(f"action: accept_connection | error: {str(e)}")
+                    continue
+        finally:
+            self._server_socket.close()
 
     def __handle_client_connection(self, client_sock):
         """
