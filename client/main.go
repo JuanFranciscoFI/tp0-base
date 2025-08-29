@@ -97,7 +97,7 @@ func signalHandler(client *common.Client) {
 
 	go func() {
 		<-sigChan
-		log.Infof("action: signal_received | signal: %v", os.Interrupt)
+		log.Infof("action: signal_received | result: success")
 		client.Close()
 		os.Exit(0)
 	}()

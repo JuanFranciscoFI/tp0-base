@@ -9,6 +9,7 @@ class Server:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
+        self._shutdown = False
 
     def __graceful_shutdown(self, signum, frame):
         logging.info("action: graceful_shutdown | result: in_progress")

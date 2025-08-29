@@ -91,6 +91,7 @@ func (c *Client) StartClientLoop() {
 // Close the client socket
 func (c *Client) Close() {
 	if c.conn != nil {
+		log.Infof("action: close_connection | result: success")
 		c.conn.Close()
 	}
 }
