@@ -1,16 +1,18 @@
 #!/bin/bash
 
+set -euo pipefail
+
 if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <output_file> <number_of_clients>"
-    exit 1
+  echo "Usage: $0 <output_file> <number_of_clients>"
+  exit 1
 fi
 
 OUTPUT_FILE=$1
 NUM_CLIENTS=$2
 
 if ! [[ "$NUM_CLIENTS" =~ ^[0-9]+$ ]]; then
-    echo "Error: Number of clients must be a non-negative integer"
-    exit 1
+  echo "Error: Number of clients must be a non-negative integer"
+  exit 1
 fi
 
 cat > "$OUTPUT_FILE" <<EOL
@@ -31,7 +33,11 @@ services:
 EOL
 
 for ((i=1; i<=NUM_CLIENTS; i++)); do
-    cat >> "$OUTPUT_FILE" <<EOL
+  BIRTH=$(printf "1990-01-%02d" $(( (i % 28) + 1 )))
+  DOC=$((30000000 + i))
+  NUM=$((1000 + i * 10))
+
+  cat >> "$OUTPUT_FILE" <<EOL
   client$i:
     container_name: client$i
     image: client:latest
@@ -39,6 +45,11 @@ for ((i=1; i<=NUM_CLIENTS; i++)); do
     environment:
       - CLI_ID=$i
       - CLI_LOG_LEVEL
+      - CLI_NOMBRE=Nombre$i
+      - CLI_APELLIDO=Apellido$i
+      - CLI_DOCUMENTO=$DOC
+      - CLI_NACIMIENTO=$BIRTH
+      - CLI_NUMERO=$NUM
     volumes:
       - ./client/config.yaml:/config.yaml
     networks:
