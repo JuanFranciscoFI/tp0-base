@@ -5,8 +5,9 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"time"
 	"syscall"
+	"time"
+
 	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -127,5 +128,13 @@ func main() {
 
 	signalHandler(client)
 
-	client.StartClientLoop()
+	bet := common.Bet{
+		Nombre:     v.GetString("nombre"),
+		Apellido:   v.GetString("apellido"),
+		Documento:  v.GetUint32("documento"),
+		Nacimiento: v.GetString("nacimiento"),
+		Numero:     v.GetUint32("numero"),
+	}
+
+	client.StartClientLoop(bet)
 }
