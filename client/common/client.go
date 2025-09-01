@@ -1,7 +1,11 @@
 package common
 
 import (
+	"encoding/csv"
+	"io"
 	"net"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/op/go-logging"
@@ -9,34 +13,23 @@ import (
 
 var log = logging.MustGetLogger("log")
 
-// ClientConfig Configuration used by the client
 type ClientConfig struct {
-	ID            string
-	ServerAddress string
-	LoopAmount    int
-	LoopPeriod    time.Duration
+	ID              string
+	ServerAddress   string
+	LoopAmount      int
+	LoopPeriod      time.Duration
+	DatasetPath     string
+	BatchMaxAmount  int
 }
 
-// Client Entity that encapsulates how
 type Client struct {
-	config ClientConfig
-	conn   net.Conn
+	config   ClientConfig
+	conn     net.Conn
 	protocol *Protocol
 }
 
-// NewClient Initializes a new client receiving the configuration
-// as a parameter
-func NewClient(config ClientConfig) *Client {
-	client := &Client{
-		config: config,
-		protocol: nil,
-	}
-	return client
-}
+func NewClient(cfg ClientConfig) *Client { return &Client{config: cfg} }
 
-// CreateClientSocket Initializes client socket. In case of
-// failure, error is printed in stdout/stderr and exit 1
-// is returned
 func (c *Client) createClientSocket() error {
 	conn, err := net.Dial("tcp", c.config.ServerAddress)
 	if err != nil {
@@ -48,32 +41,91 @@ func (c *Client) createClientSocket() error {
 	return nil
 }
 
-// StartClientLoop Send messages to the client until some time threshold is met
-func (c *Client) StartClientLoop(bet Bet) {
-	if err := c.createClientSocket(); err != nil {
-		log.Fatalf("Error al crear el socket: %v", err)
-	}
-	defer c.protocol.Close()
-
-	if err := c.protocol.SendBet(bet); err != nil {
-		log.Errorf("action: apuesta_enviada | result: fail | error: %v", err)
-		return
-	}
-
-	_, err := c.protocol.RecvResponse()
-	if err != nil {
-		log.Errorf("action: apuesta_enviada | result: fail | error: %v", err)
-		return
-	}
-
-	log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", bet.Documento, bet.Numero)
-}
-
-// Close the client socket
 func (c *Client) Close() {
-	if c.conn != nil {
+	if c.protocol != nil {
+		_ = c.protocol.Close()
 		log.Infof("action: close_connection | result: success")
-		c.conn.Close()
+		return
+	}
+	if c.conn != nil {
+		_ = c.conn.Close()
+		log.Infof("action: close_connection | result: success")
 	}
 }
 
+func (c *Client) SendBatchesFromDataset() error {
+	if err := c.createClientSocket(); err != nil {
+		return err
+	}
+
+	defer c.Close()
+
+	f, err := os.Open(c.config.DatasetPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	r := csv.NewReader(f)
+	r.FieldsPerRecord = 5
+
+	maxN := c.config.BatchMaxAmount
+
+	var (
+		batch   []Bet
+		curSize = 2
+	)
+
+	flush := func() error {
+		if len(batch) == 0 {
+			return nil
+		}
+		if err := c.protocol.SendBatch(batch); err != nil {
+			return err
+		}
+		if _, err := c.protocol.RecvResponse(); err != nil {
+			return err
+		}
+		log.Infof("action: apuestas_enviadas | result: success | cantidad: %d", len(batch))
+		batch = batch[:0]
+		curSize = 2
+		return nil
+	}
+
+	for {
+		rec, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		doc64, _ := strconv.ParseUint(rec[2], 10, 32)
+		num64, _ := strconv.ParseUint(rec[4], 10, 32)
+		next := Bet{
+			Nombre:     rec[0],
+			Apellido:   rec[1],
+			Documento:  uint32(doc64),
+			Nacimiento: rec[3],
+			Numero:     uint32(num64),
+		}
+
+		betSize := sizeOfBet(next)
+		if len(batch) > 0 && (curSize+betSize > maxPacketBytes) {
+			if err := flush(); err != nil {
+				return err
+			}
+		}
+		if len(batch) == maxN {
+			if err := flush(); err != nil {
+				return err
+			}
+		}
+
+		batch = append(batch, next)
+		curSize += betSize
+	}
+
+	return flush()
+}

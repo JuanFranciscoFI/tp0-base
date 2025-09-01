@@ -17,40 +17,30 @@ import (
 
 var log = logging.MustGetLogger("log")
 
-// InitConfig Function that uses viper library to parse configuration parameters.
-// Viper is configured to read variables from both environment variables and the
-// config file ./config.yaml. Environment variables takes precedence over parameters
-// defined in the configuration file. If some of the variables cannot be parsed,
-// an error is returned
+// InitConfig: carga config de archivo + env (prefijo CLI_)
 func InitConfig() (*viper.Viper, error) {
 	v := viper.New()
 
-	// Configure viper to read env variables with the CLI_ prefix
+	v.SetDefault("dataset.path", "")
+
+	// Env con prefijo CLI_
 	v.AutomaticEnv()
 	v.SetEnvPrefix("cli")
-	// Use a replacer to replace env variables underscores with points. This let us
-	// use nested configurations in the config file and at the same time define
-	// env variables for the nested configurations
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
-	// Add env variables supported
-	v.BindEnv("id")
-	v.BindEnv("server", "address")
-	v.BindEnv("loop", "period")
-	v.BindEnv("loop", "amount")
-	v.BindEnv("log", "level")
+	_ = v.BindEnv("id")
+	_ = v.BindEnv("server", "address")
+	_ = v.BindEnv("loop", "period")
+	_ = v.BindEnv("loop", "amount")
+	_ = v.BindEnv("log", "level")
 
-	// Try to read configuration from config file. If config file
-	// does not exists then ReadInConfig will fail but configuration
-	// can be loaded from the environment variables so we shouldn't
-	// return an error in that case
+	// Archivo de config
 	v.SetConfigFile("./config.yaml")
 	if err := v.ReadInConfig(); err != nil {
 		fmt.Printf("Configuration could not be read from config file. Using env variables instead")
 	}
 
-	// Parse time.Duration variables and return an error if those variables cannot be parsed
-
+	// Validación de loop.period (aunque no lo usemos en Ej.6, mantiene compat)
 	if _, err := time.ParseDuration(v.GetString("loop.period")); err != nil {
 		return nil, errors.Wrapf(err, "Could not parse CLI_LOOP_PERIOD env var as time.Duration.")
 	}
@@ -58,14 +48,10 @@ func InitConfig() (*viper.Viper, error) {
 	return v, nil
 }
 
-// InitLogger Receives the log level to be set in go-logging as a string. This method
-// parses the string and set the level to the logger. If the level string is not
-// valid an error is returned
+// InitLogger
 func InitLogger(logLevel string) error {
 	baseBackend := logging.NewLogBackend(os.Stdout, "", 0)
-	format := logging.MustStringFormatter(
-		`%{time:2006-01-02 15:04:05} %{level:.5s}     %{message}`,
-	)
+	format := logging.MustStringFormatter(`%{time:2006-01-02 15:04:05} %{level:.5s}     %{message}`)
 	backendFormatter := logging.NewBackendFormatter(baseBackend, format)
 
 	backendLeveled := logging.AddModuleLevel(backendFormatter)
@@ -74,14 +60,11 @@ func InitLogger(logLevel string) error {
 		return err
 	}
 	backendLeveled.SetLevel(logLevelCode, "")
-
-	// Set the backends to be used.
 	logging.SetBackend(backendLeveled)
 	return nil
 }
 
-// PrintConfig Print all the configuration parameters of the program.
-// For debugging purposes only
+// PrintConfig (podés ampliar si querés ver batch/dataset)
 func PrintConfig(v *viper.Viper) {
 	log.Infof("action: config | result: success | client_id: %s | server_address: %s | loop_amount: %v | loop_period: %v | log_level: %s",
 		v.GetString("id"),
@@ -114,27 +97,21 @@ func main() {
 		log.Criticalf("%s", err)
 	}
 
-	// Print program config with debugging purposes
 	PrintConfig(v)
-
+	
 	clientConfig := common.ClientConfig{
-		ServerAddress: v.GetString("server.address"),
-		ID:            v.GetString("id"),
-		LoopAmount:    v.GetInt("loop.amount"),
-		LoopPeriod:    v.GetDuration("loop.period"),
+		ServerAddress:  v.GetString("server.address"),
+		ID:             v.GetString("id"),
+		LoopAmount:     v.GetInt("loop.amount"),
+		LoopPeriod:     v.GetDuration("loop.period"),
+		DatasetPath:    "/agency.csv",
+		BatchMaxAmount: v.GetInt("batch.maxAmount"),
 	}
 
 	client := common.NewClient(clientConfig)
-
 	signalHandler(client)
 
-	bet := common.Bet{
-		Nombre:     v.GetString("nombre"),
-		Apellido:   v.GetString("apellido"),
-		Documento:  v.GetUint32("documento"),
-		Nacimiento: v.GetString("nacimiento"),
-		Numero:     v.GetUint32("numero"),
+	if err := client.SendBatchesFromDataset(); err != nil {
+		log.Criticalf("action: apuestas_enviadas | result: fail | error: %v", err)
 	}
-
-	client.StartClientLoop(bet)
 }

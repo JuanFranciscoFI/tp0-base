@@ -37,19 +37,27 @@ class Server:
     def __handle_client_connection(self, client_sock):
         proto = Protocol(client_sock, self._agency_id)
         try:
-            bet = proto.recv_bet()
-            store_bets([bet])
-            proto.send_response(ok=True)
-            logging.info(
-                f"action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}"
-            )
+            while True:
+                try:
+                    bets = proto.recv_batch()
+                    if not bets:
+                        proto.send_response(True)
+                        logging.info("action: apuesta_recibida | result: success | cantidad: 0")
+                        continue
+                    
+                    store_bets(bets)
+                    proto.send_response(True)
+                    logging.info(f"action: apuesta_recibida | result: success | cantidad: {len(bets)}")
 
-        except Exception as e:
-            logging.error(f"action: apuesta_almacenada | result: fail | error: {e}")
-            try:
-                proto.send_response(ok=False)
-            except Exception:
-                pass
+                except ConnectionError:
+                    break
+                except Exception as e:
+                    try:
+                        proto.send_response(False)
+                    except Exception:
+                        pass
+                    logging.error(f"action: apuesta_recibida | result: fail | cantidad: 0 | error: {e}")
+                    break
         finally:
             client_sock.close()
 
