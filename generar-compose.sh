@@ -1,5 +1,4 @@
 #!/bin/bash
-
 set -euo pipefail
 
 if [ "$#" -ne 2 ]; then
@@ -33,10 +32,6 @@ services:
 EOL
 
 for ((i=1; i<=NUM_CLIENTS; i++)); do
-  BIRTH=$(printf "1990-01-%02d" $(( (i % 28) + 1 )))
-  DOC=$((30000000 + i))
-  NUM=$((1000 + i * 10))
-
   cat >> "$OUTPUT_FILE" <<EOL
   client$i:
     container_name: client$i
@@ -45,13 +40,9 @@ for ((i=1; i<=NUM_CLIENTS; i++)); do
     environment:
       - CLI_ID=$i
       - CLI_LOG_LEVEL
-      - CLI_NOMBRE=Nombre$i
-      - CLI_APELLIDO=Apellido$i
-      - CLI_DOCUMENTO=$DOC
-      - CLI_NACIMIENTO=$BIRTH
-      - CLI_NUMERO=$NUM
     volumes:
       - ./client/config.yaml:/config.yaml
+      - ./.data/agency-$i.csv:/agency.csv:ro
     networks:
       - testing_net
     depends_on:
