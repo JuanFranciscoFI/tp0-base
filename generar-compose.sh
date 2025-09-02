@@ -24,6 +24,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - LOGGING_LEVEL
+      - AGENCIES_AMOUNT=$NUM_CLIENTS
     volumes:
       - ./server/config.ini:/config.ini
     networks:
