@@ -14,18 +14,26 @@ import (
 var log = logging.MustGetLogger("log")
 
 type ClientConfig struct {
-	ID              string
-	ServerAddress   string
-	LoopAmount      int
-	LoopPeriod      time.Duration
-	DatasetPath     string
-	BatchMaxAmount  int
+	ID             string
+	ServerAddress  string
+	LoopAmount     int
+	LoopPeriod     time.Duration
+	DatasetPath    string
+	BatchMaxAmount int
 }
 
 type Client struct {
 	config   ClientConfig
 	conn     net.Conn
 	protocol *Protocol
+}
+
+type Bet struct {
+	Nombre     string
+	Apellido   string
+	Documento  uint32
+	Nacimiento string
+	Numero     uint32
 }
 
 func NewClient(cfg ClientConfig) *Client { return &Client{config: cfg} }
@@ -57,13 +65,16 @@ func (c *Client) SendBatchesFromDataset() error {
 	if err := c.createClientSocket(); err != nil {
 		return err
 	}
-
 	defer c.Close()
+	p := c.protocol
+
+	aid64, _ := strconv.ParseUint(c.config.ID, 10, 16)
+	if err := p.SendHello(uint16(aid64)); err != nil { return err }
+	if err := p.RecvAck(); err != nil { return err }
+	log.Infof("action: hello | result: success | agency_id: %v", aid64)
 
 	f, err := os.Open(c.config.DatasetPath)
-	if err != nil {
-		return err
-	}
+	if err != nil { return err }
 	defer f.Close()
 
 	r := csv.NewReader(f)
@@ -73,33 +84,23 @@ func (c *Client) SendBatchesFromDataset() error {
 
 	var (
 		batch   []Bet
-		curSize = 2
+		curSize = 3
 	)
 
 	flush := func() error {
-		if len(batch) == 0 {
-			return nil
-		}
-		if err := c.protocol.SendBatch(batch); err != nil {
-			return err
-		}
-		if _, err := c.protocol.RecvResponse(); err != nil {
-			return err
-		}
+		if len(batch) == 0 { return nil }
+		if err := p.SendBatch(batch); err != nil { return err }
+		if err := p.RecvAck(); err != nil { return err }
 		log.Infof("action: apuestas_enviadas | result: success | cantidad: %d", len(batch))
 		batch = batch[:0]
-		curSize = 2
+		curSize = 3
 		return nil
 	}
 
 	for {
 		rec, err := r.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
+		if err == io.EOF { break }
+		if err != nil { return err }
 
 		doc64, _ := strconv.ParseUint(rec[2], 10, 32)
 		num64, _ := strconv.ParseUint(rec[4], 10, 32)
@@ -113,19 +114,24 @@ func (c *Client) SendBatchesFromDataset() error {
 
 		betSize := sizeOfBet(next)
 		if len(batch) > 0 && (curSize+betSize > maxPacketBytes) {
-			if err := flush(); err != nil {
-				return err
-			}
+			if err := flush(); err != nil { return err }
 		}
 		if len(batch) == maxN {
-			if err := flush(); err != nil {
-				return err
-			}
+			if err := flush(); err != nil { return err }
 		}
 
 		batch = append(batch, next)
 		curSize += betSize
 	}
+	if err := flush(); err != nil { return err }
 
-	return flush()
+	if err := p.SendDone(); err != nil { return err }
+	if err := p.RecvAck(); err != nil { return err }
+
+	log.Infof("action: esperando_ganadores | result: in_progress")
+	winners, err := p.RecvWinners()
+	if err != nil { return err }
+	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", len(winners))
+
+	return nil
 }
