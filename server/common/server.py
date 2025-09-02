@@ -1,10 +1,13 @@
 import socket
 import logging
 import signal
+import threading
 from collections import defaultdict
 
 from common.protocol import Protocol, MSG_HELLO, MSG_BATCH, MSG_DONE
 from common.utils import store_bets, load_bets, has_won
+
+
 class Server:
     def __init__(self, port, listen_backlog):
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -12,23 +15,37 @@ class Server:
         self._server_socket.listen(listen_backlog)
         self._shutdown = False
 
-        self._agents_waiting = {}
-        self._draw_done = False
+        self._expected_agencies = None
+        self._bets_lock = threading.Lock()
+        self._arrived_lock = threading.Lock()
+        self._arrived = set()
+        self._barrier = None
+        self._winners_by_agency = {}
+
+        self._workers = []
 
     def __graceful_shutdown(self, signum, frame):
         logging.info("action: graceful_shutdown | result: in_progress")
         self._shutdown = True
         try:
             self._server_socket.close()
-        finally:
-            for proto in self._agents_waiting.values():
-                try:
-                    proto.close()
-                except Exception:
-                    pass
-            logging.info("action: graceful_shutdown | result: success")
+        except Exception:
+            pass
+        b = self._barrier
+        if b is not None:
+            try:
+                b.abort()
+            except Exception:
+                pass
+        logging.info("action: graceful_shutdown | result: success")
 
     def run(self, expected_agencies):
+        self._expected_agencies = expected_agencies
+        self._barrier = threading.Barrier(
+            parties=expected_agencies,
+            action=self.__compute_winners
+        )
+
         signal.signal(signal.SIGINT, self.__graceful_shutdown)
         signal.signal(signal.SIGTERM, self.__graceful_shutdown)
 
@@ -45,15 +62,21 @@ class Server:
                 logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
                 proto = Protocol(c)
 
-                self.__handle_client_until_done(proto)
-
-                if not self._draw_done and len(self._agents_waiting) == expected_agencies:
-                    self.broadcast_results()
+                t = threading.Thread(
+                    target=self.__handle_client_until_done,
+                    args=(proto,),
+                    name=f"client-{addr[0]}:{addr[1]}",
+                    daemon=True
+                )
+                t.start()
+                self._workers.append(t)
         finally:
             try:
                 self._server_socket.close()
             except Exception:
                 pass
+            for t in self._workers:
+                t.join(timeout=1.0)
 
     def __handle_client_until_done(self, proto: Protocol):
         agency_id = None
@@ -71,7 +94,8 @@ class Server:
                         proto.send_ack(False)
                         continue
                     bets = proto.recv_batch(agency_id)
-                    store_bets(bets)
+                    with self._bets_lock:
+                        store_bets(bets)
                     proto.send_ack(True)
                     logging.info(f"action: apuesta_recibida | result: success | cantidad: {len(bets)}")
 
@@ -80,7 +104,39 @@ class Server:
                         proto.send_ack(False)
                         continue
                     proto.send_ack(True)
-                    self._agents_waiting[agency_id] = proto
+
+                    with self._arrived_lock:
+                        if agency_id in self._arrived:
+                            logging.warning(f"action: agent_done_duplicate | result: ignored | agency: {agency_id}")
+                            try:
+                                proto.close()
+                            except Exception:
+                                pass
+                            return
+                        self._arrived.add(agency_id)
+                        logging.debug(f"action: agent_ready | result: success | count: {len(self._arrived)}/{self._expected_agencies}")
+
+                    try:
+                        self._barrier.wait()
+                    except threading.BrokenBarrierError:
+                        logging.error("action: barrier_wait | result: fail | error: BrokenBarrier")
+                        try:
+                            proto.close()
+                        except Exception:
+                            pass
+                        return
+
+                    dnis = self._winners_by_agency.get(agency_id, [])
+                    try:
+                        proto.send_winners(dnis)
+                        logging.info(f"action: send_lottery_results | result: success | agency: {agency_id} | winners: {len(dnis)}")
+                    except Exception as e:
+                        logging.error(f"action: send_lottery_results | result: fail | agency: {agency_id} | error: {e}")
+                    finally:
+                        try:
+                            proto.close()
+                        except Exception:
+                            pass
                     return
 
                 else:
@@ -90,42 +146,31 @@ class Server:
                         pass
                     proto.close()
                     return
+
         except ConnectionError:
-            proto.close()
+            try:
+                proto.close()
+            except Exception:
+                pass
         except Exception as e:
             logging.error(f"action: server_error | error: {e}")
             try:
                 proto.send_ack(False)
             except Exception:
                 pass
-            proto.close()
-
-    def lottery(self):
-        winners_by_agency = defaultdict(list)
-        for bet in load_bets():
-            if has_won(bet):
-                try:
-                    winners_by_agency[bet.agency].append(int(bet.document))
-                except Exception:
-                    pass
-        return winners_by_agency
-
-    def broadcast_results(self):
-        winners_by_agency = self.lottery()
-
-        for ag_id, proto in list(self._agents_waiting.items()):
-            dnis = winners_by_agency.get(ag_id, [])
             try:
-                proto.send_winners(dnis)
-                logging.info(f"action: send_lottery_results | result: success | agency: {ag_id} | winners: {len(dnis)}")
-            except Exception as e:
-                logging.error(f"action: send_lottery_results | result: fail | agency: {ag_id} | error: {e}")
-            finally:
-                try:
-                    proto.close()
-                except Exception:
-                    pass
+                proto.close()
+            except Exception:
+                pass
 
-        self._agents_waiting.clear()
-        self._draw_done = True
+    def __compute_winners(self):
+        winners_by_agency = defaultdict(list)
+        with self._bets_lock:
+            for bet in load_bets():
+                if has_won(bet):
+                    try:
+                        winners_by_agency[bet.agency].append(int(bet.document))
+                    except Exception:
+                        pass
+        self._winners_by_agency = winners_by_agency
         logging.info("action: sorteo | result: success")
