@@ -1,68 +1,131 @@
 import socket
 import logging
 import signal
-from common.protocol import Protocol
-from common.utils import store_bets
+from collections import defaultdict
 
+from common.protocol import Protocol, MSG_HELLO, MSG_BATCH, MSG_DONE
+from common.utils import store_bets, load_bets, has_won
 class Server:
-    def __init__(self, port, listen_backlog, agency_id=0):
+    def __init__(self, port, listen_backlog):
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._shutdown = False
-        self._agency_id = agency_id
+
+        self._agents_waiting = {}
+        self._draw_done = False
 
     def __graceful_shutdown(self, signum, frame):
         logging.info("action: graceful_shutdown | result: in_progress")
         self._shutdown = True
-        self._server_socket.close()
-        logging.info("action: graceful_shutdown | result: success")
+        try:
+            self._server_socket.close()
+        finally:
+            for proto in self._agents_waiting.values():
+                try:
+                    proto.close()
+                except Exception:
+                    pass
+            logging.info("action: graceful_shutdown | result: success")
 
-    def run(self):
+    def run(self, expected_agencies):
         signal.signal(signal.SIGINT, self.__graceful_shutdown)
         signal.signal(signal.SIGTERM, self.__graceful_shutdown)
 
         try:
             while not self._shutdown:
+                logging.info('action: accept_connections | result: in_progress')
                 try:
-                    client_sock = self.__accept_new_connection()
-                    if client_sock:
-                        self.__handle_client_connection(client_sock)
-                except OSError as e:
-                    if not self._shutdown:
-                        logging.error(f"action: accept_connection | error: {str(e)}")
-        finally:
-            self._server_socket.close()
+                    c, addr = self._server_socket.accept()
+                except OSError:
+                    if self._shutdown:
+                        break
+                    continue
 
-    def __handle_client_connection(self, client_sock):
-        proto = Protocol(client_sock, self._agency_id)
+                logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
+                proto = Protocol(c)
+
+                self.__handle_client_until_done(proto)
+
+                if not self._draw_done and len(self._agents_waiting) == expected_agencies:
+                    self.broadcast_results()
+        finally:
+            try:
+                self._server_socket.close()
+            except Exception:
+                pass
+
+    def __handle_client_until_done(self, proto: Protocol):
+        agency_id = None
         try:
             while True:
-                try:
-                    bets = proto.recv_batch()
-                    if not bets:
-                        proto.send_response(True)
-                        logging.info("action: apuesta_recibida | result: success | cantidad: 0")
+                mtype = proto.recv_msg_type()
+                logging.info(f"action: msg_type | result: success | type: {mtype}")
+
+                if mtype == MSG_HELLO:
+                    agency_id = proto.recv_u16()
+                    proto.send_ack(True)
+
+                elif mtype == MSG_BATCH:
+                    if agency_id is None:
+                        proto.send_ack(False)
                         continue
-                    
+                    bets = proto.recv_batch(agency_id)
                     store_bets(bets)
-                    proto.send_response(True)
+                    proto.send_ack(True)
                     logging.info(f"action: apuesta_recibida | result: success | cantidad: {len(bets)}")
 
-                except ConnectionError:
-                    break
-                except Exception as e:
+                elif mtype == MSG_DONE:
+                    if agency_id is None:
+                        proto.send_ack(False)
+                        continue
+                    proto.send_ack(True)
+                    self._agents_waiting[agency_id] = proto
+                    return
+
+                else:
                     try:
-                        proto.send_response(False)
+                        proto.send_ack(False)
                     except Exception:
                         pass
-                    logging.error(f"action: apuesta_recibida | result: fail | cantidad: 0 | error: {e}")
-                    break
-        finally:
-            client_sock.close()
+                    proto.close()
+                    return
+        except ConnectionError:
+            proto.close()
+        except Exception as e:
+            logging.error(f"action: server_error | error: {e}")
+            try:
+                proto.send_ack(False)
+            except Exception:
+                pass
+            proto.close()
 
-    def __accept_new_connection(self):
-        logging.info('action: accept_connections | result: in_progress')
-        c, addr = self._server_socket.accept()
-        logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
-        return c
+    def lottery(self):
+        winners_by_agency = defaultdict(list)
+        for bet in load_bets():
+            if has_won(bet):
+                try:
+                    winners_by_agency[bet.agency].append(int(bet.document))
+                except Exception:
+                    pass
+        return winners_by_agency
+
+    def broadcast_results(self):
+        winners_by_agency = self.lottery()
+
+        for ag_id, proto in list(self._agents_waiting.items()):
+            dnis = winners_by_agency.get(ag_id, [])
+            try:
+                proto.send_winners(dnis)
+                logging.info(f"action: send_lottery_results | result: success | agency: {ag_id} | winners: {len(dnis)}")
+            except Exception as e:
+                logging.error(f"action: send_lottery_results | result: fail | agency: {ag_id} | error: {e}")
+            finally:
+                try:
+                    proto.close()
+                except Exception:
+                    pass
+
+        self._agents_waiting.clear()
+        self._draw_done = True
+        logging.info("action: sorteo | result: success")
