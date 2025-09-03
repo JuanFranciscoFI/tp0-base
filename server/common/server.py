@@ -17,8 +17,6 @@ class Server:
 
         self._expected_agencies = None
         self._bets_lock = threading.Lock()
-        self._arrived_lock = threading.Lock()
-        self._arrived = set()
         self._barrier = None
         self._winners_by_agency = {}
 
@@ -104,17 +102,6 @@ class Server:
                         proto.send_ack(False)
                         continue
                     proto.send_ack(True)
-
-                    with self._arrived_lock:
-                        if agency_id in self._arrived:
-                            logging.warning(f"action: agent_done_duplicate | result: ignored | agency: {agency_id}")
-                            try:
-                                proto.close()
-                            except Exception:
-                                pass
-                            return
-                        self._arrived.add(agency_id)
-                        logging.debug(f"action: agent_ready | result: success | count: {len(self._arrived)}/{self._expected_agencies}")
 
                     try:
                         self._barrier.wait()
