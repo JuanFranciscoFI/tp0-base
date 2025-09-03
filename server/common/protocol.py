@@ -1,4 +1,3 @@
-import struct
 from common.utils import Bet
 
 STATUS_OK  = 0x00
@@ -19,10 +18,10 @@ class Protocol:
         return buf
 
     def _recv_u16(self) -> int:
-        return struct.unpack(">H", self._read_all(2))[0]
+        return int.from_bytes(self._read_all(2), "big", signed=False)
 
     def _recv_u32(self) -> int:
-        return struct.unpack(">I", self._read_all(4))[0]
+        return int.from_bytes(self._read_all(4), "big", signed=False)
 
     def _recv_string_u16(self) -> str:
         length = self._recv_u16()
