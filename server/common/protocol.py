@@ -29,28 +29,28 @@ class Protocol:
     def recv_msg_type(self) -> int:
         return self._read_all(1)[0]
 
-    def _recv_u16(self) -> int:
+    def recv_u16(self) -> int:
         return int.from_bytes(self._read_all(2), "big", signed=False)
 
-    def _recv_u32(self) -> int:
+    def recv_u32(self) -> int:
         return int.from_bytes(self._read_all(4), "big", signed=False)
 
     def recv_string_u16(self) -> str:
-        length = self._recv_u16()
+        length = self.recv_u16()
         if length == 0:
             return ""
         data = self._read_all(length)
         return data.decode("utf-8")
 
     def recv_batch(self, agency_id: int) -> list[Bet]:
-        count = self._recv_u16()
+        count = self.recv_u16()
         bets = []
         for _ in range(count):
             first_name = self.recv_string_u16()
             last_name  = self.recv_string_u16()
-            document   = str(self._recv_u32())
+            document   = str(self.recv_u32())
             birthdate  = self.recv_string_u16().strip().strip('"').strip("'")
-            number     = self._recv_u32()
+            number     = self.recv_u32()
             bets.append(Bet(
                 agency=agency_id,
                 first_name=first_name,
