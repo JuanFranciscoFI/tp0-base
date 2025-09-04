@@ -230,11 +230,6 @@ El servidor, implementado en Python, incluye su propia clase `Protocol` con mét
 
 Un aspecto clave de la implementación es el manejo robusto de operaciones de red mediante el patrón short-read/short-write. En el cliente, se utiliza `writeAll` para garantizar que todos los bytes sean enviados, reintentando la escritura si es necesario. En el servidor, se implementó `readAll` para leer todos los bytes de la conexión, y un búfer de lectura que acumula datos hasta completar el mensaje, manejando adecuadamente los casos donde `recv` devuelve menos bytes de los solicitados.
 
-El flujo de comunicación sigue un patrón simple pero efectivo: el cliente establece una conexión TCP, envía la apuesta en el formato binario acordado, espera la confirmación del servidor (un byte indicando éxito o fallo) y finalmente cierra la conexión. Este diseño minimiza el tiempo de conexión y simplifica el manejo de concurrencia en el servidor.
-
-La implementación también incluye validaciones exhaustivas de los datos recibidos, verificando tamaños máximos, rangos de valores y la integridad general de los mensajes. En caso de detectar cualquier anomalía, se cierra la conexión de manera segura para evitar estados inconsistentes.
-
-
 ### Ejercicio N°6:
 
 En ejercicio se centró en optimizar la transmisión de apuestas mediante la implementación de procesamiento por lotes (batch processing), mejorando significativamente el rendimiento de la aplicación al reducir la sobrecarga de red. Esta mejora permite enviar múltiples apuestas en una sola operación de red, lo que resulta especialmente beneficioso cuando se manejan grandes volúmenes de datos.
