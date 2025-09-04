@@ -16,14 +16,6 @@ const (
 	maxPacketBytes  = 8192
 )
 
-type Bet struct {
-	Nombre     string
-	Apellido   string
-	Documento  uint32
-	Nacimiento string
-	Numero     uint32
-}
-
 func NewProtocol(skt net.Conn) *Protocol { return &Protocol{skt: skt} }
 
 

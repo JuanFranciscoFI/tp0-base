@@ -28,6 +28,14 @@ type Client struct {
 	protocol *Protocol
 }
 
+type Bet struct {
+	Nombre     string
+	Apellido   string
+	Documento  uint32
+	Nacimiento string
+	Numero     uint32
+}
+
 func NewClient(cfg ClientConfig) *Client { return &Client{config: cfg} }
 
 func (c *Client) createClientSocket() error {
