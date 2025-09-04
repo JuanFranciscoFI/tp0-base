@@ -178,3 +178,13 @@ Se espera que se redacte una sección del README en donde se indique cómo ejecu
 Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/tp0-tests) de caja negra. Se exige que la resolución de los ejercicios pase tales pruebas, o en su defecto que las discrepancias sean justificadas y discutidas con los docentes antes del día de la entrega. El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación. Respetar las entradas de log planteadas en los ejercicios, pues son las que se chequean en cada uno de los tests.
 
 La corrección personal tendrá en cuenta la calidad del código entregado y casos de error posibles, se manifiesten o no durante la ejecución del trabajo práctico. Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
+
+## Explicación resolución ejercicios
+
+### Ejercicio N°2:
+
+En este ejercicio se implementó una mejora significativa en la gestión de configuraciones del proyecto, permitiendo realizar cambios en los archivos de configuración sin necesidad de reconstruir las imágenes de Docker. La solución consistió en modificar el script `generar-compose.sh` para incluir volúmenes que montan los archivos de configuración directamente desde el sistema de archivos del host hacia los contenedores en tiempo de ejecución.
+
+El archivo de configuración del servidor (`config.ini`) y los de los clientes (`config.yaml`) ahora se montan mediante volúmenes, lo que significa que cualquier modificación en estos archivos se refleja inmediatamente en los contenedores sin necesidad de reconstruirlos. Para aplicar los cambios, simplemente es necesario reiniciar los contenedores con los comandos `docker-compose down` seguido de `docker-compose up -d`.
+
+Esta implementación ofrece varias ventajas: acelera el ciclo de desarrollo al eliminar la necesidad de reconstruir imágenes para cada ajuste de configuración, facilita la gestión de diferentes entornos (desarrollo, testing, producción) mediante archivos de configuración separados, y asegura que las configuraciones persistan independientemente del ciclo de vida de los contenedores. Además, al mantener las configuraciones fuera de las imágenes, se sigue mejor la práctica de separación entre configuración y código.
