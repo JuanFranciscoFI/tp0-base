@@ -2,11 +2,9 @@ import socket
 import logging
 import signal
 import threading
-from collections import defaultdict
 
 from common.protocol import Protocol, MSG_HELLO, MSG_BATCH, MSG_DONE
-from common.utils import store_bets, load_bets, has_won
-
+from common.utils_monitor import UtilsMonitor
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -16,25 +14,19 @@ class Server:
         self._shutdown = False
 
         self._expected_agencies = None
-        self._bets_lock = threading.Lock()
         self._barrier = None
         self._winners_by_agency = {}
+        self._monitor = UtilsMonitor()
 
         self._workers = []
 
     def __graceful_shutdown(self, signum, frame):
         logging.info("action: graceful_shutdown | result: in_progress")
         self._shutdown = True
-        try:
-            self._server_socket.close()
-        except Exception:
-            pass
+        self._server_socket.close()
         b = self._barrier
         if b is not None:
-            try:
-                b.abort()
-            except Exception:
-                pass
+            b.abort()
         logging.info("action: graceful_shutdown | result: success")
 
     def run(self, expected_agencies):
@@ -69,10 +61,7 @@ class Server:
                 t.start()
                 self._workers.append(t)
         finally:
-            try:
-                self._server_socket.close()
-            except Exception:
-                pass
+            self._server_socket.close()
             for t in self._workers:
                 t.join(timeout=1.0)
 
@@ -92,8 +81,7 @@ class Server:
                         proto.send_ack(False)
                         continue
                     bets = proto.recv_batch(agency_id)
-                    with self._bets_lock:
-                        store_bets(bets)
+                    self._monitor.store_bets(bets)
                     proto.send_ack(True)
                     logging.info(f"action: apuesta_recibida | result: success | cantidad: {len(bets)}")
 
@@ -107,10 +95,7 @@ class Server:
                         self._barrier.wait()
                     except threading.BrokenBarrierError:
                         logging.error("action: barrier_wait | result: fail | error: BrokenBarrier")
-                        try:
-                            proto.close()
-                        except Exception:
-                            pass
+                        proto.close()
                         return
 
                     dnis = self._winners_by_agency.get(agency_id, [])
@@ -120,44 +105,21 @@ class Server:
                     except Exception as e:
                         logging.error(f"action: send_lottery_results | result: fail | agency: {agency_id} | error: {e}")
                     finally:
-                        try:
-                            proto.close()
-                        except Exception:
-                            pass
+                        proto.close()
                     return
 
                 else:
-                    try:
-                        proto.send_ack(False)
-                    except Exception:
-                        pass
+                    proto.send_ack(False)
                     proto.close()
                     return
 
         except ConnectionError:
-            try:
-                proto.close()
-            except Exception:
-                pass
+            proto.close()
         except Exception as e:
             logging.error(f"action: server_error | error: {e}")
-            try:
-                proto.send_ack(False)
-            except Exception:
-                pass
-            try:
-                proto.close()
-            except Exception:
-                pass
+            proto.send_ack(False)
+            proto.close()
 
     def __compute_winners(self):
-        winners_by_agency = defaultdict(list)
-        with self._bets_lock:
-            for bet in load_bets():
-                if has_won(bet):
-                    try:
-                        winners_by_agency[bet.agency].append(int(bet.document))
-                    except Exception:
-                        pass
-        self._winners_by_agency = winners_by_agency
+        self._winners_by_agency = self._monitor.compute_winners()
         logging.info("action: sorteo | result: success")

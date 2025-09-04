@@ -120,8 +120,6 @@ Emulará a una _agencia de quiniela_ que participa del proyecto. Existen 5 agenc
 
 Los campos deben enviarse al servidor para dejar registro de la apuesta. Al recibir la confirmación del servidor se debe imprimir por log: `action: apuesta_enviada | result: success | dni: ${DNI} | numero: ${NUMERO}`.
 
-
-
 #### Servidor
 Emulará a la _central de Lotería Nacional_. Deberá recibir los campos de la cada apuesta desde los clientes y almacenar la información mediante la función `store_bet(...)` para control futuro de ganadores. La función `store_bet(...)` es provista por la cátedra y no podrá ser modificada por el alumno.
 Al persistir se debe imprimir por log: `action: apuesta_almacenada | result: success | dni: ${DNI} | numero: ${NUMERO}`.
@@ -178,3 +176,111 @@ Se espera que se redacte una sección del README en donde se indique cómo ejecu
 Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/tp0-tests) de caja negra. Se exige que la resolución de los ejercicios pase tales pruebas, o en su defecto que las discrepancias sean justificadas y discutidas con los docentes antes del día de la entrega. El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación. Respetar las entradas de log planteadas en los ejercicios, pues son las que se chequean en cada uno de los tests.
 
 La corrección personal tendrá en cuenta la calidad del código entregado y casos de error posibles, se manifiesten o no durante la ejecución del trabajo práctico. Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
+
+
+## Explicación resolución ejercicios
+
+### Ejercicio N°1:
+
+El primer ejercicio consistió en desarrollar un script bash llamado `generar-compose.sh` que simplifica la generación de archivos de configuración para Docker Compose. Este script permite crear configuraciones personalizadas con un número variable de clientes, cada uno con su propia configuración de red y dependencias. 
+
+Para utilizarlo, primero es necesario otorgar permisos de ejecución con `chmod +x generar-compose.sh` y luego ejecutarlo especificando el nombre del archivo de salida y la cantidad de clientes deseados. Por ejemplo, para generar una configuración con 3 clientes en un archivo llamado `docker-compose-dev.yaml`, se ejecutaría:
+
+```bash
+./generar-compose.sh docker-compose-dev.yaml 3
+```
+
+Una vez generado, es posible validar la sintaxis del archivo resultante con el comando `docker-compose -f <archivo_generado> config`. El script se encarga de mantener una nomenclatura consistente para los contenedores (client1, client2, etc.) y de configurar correctamente todas las dependencias y redes necesarias para que los servicios se comuniquen entre sí.
+
+### Ejercicio N°2:
+
+En este ejercicio se implementó una mejora significativa en la gestión de configuraciones del proyecto, permitiendo realizar cambios en los archivos de configuración sin necesidad de reconstruir las imágenes de Docker. La solución consistió en modificar el script `generar-compose.sh` para incluir volúmenes que montan los archivos de configuración directamente desde el sistema de archivos del host hacia los contenedores en tiempo de ejecución.
+
+El archivo de configuración del servidor (`config.ini`) y los de los clientes (`config.yaml`) ahora se montan mediante volúmenes, lo que significa que cualquier modificación en estos archivos se refleja inmediatamente en los contenedores sin necesidad de reconstruirlos. Para aplicar los cambios, simplemente es necesario reiniciar los contenedores con los comandos `docker-compose down` seguido de `docker-compose up -d`.
+
+Esta implementación ofrece varias ventajas: acelera el ciclo de desarrollo al eliminar la necesidad de reconstruir imágenes para cada ajuste de configuración, facilita la gestión de diferentes entornos (desarrollo, testing, producción) mediante archivos de configuración separados, y asegura que las configuraciones persistan independientemente del ciclo de vida de los contenedores. Además, al mantener las configuraciones fuera de las imágenes, se sigue mejor la práctica de separación entre configuración y código.
+
+### Ejercicio N°3:
+
+Para garantizar el correcto funcionamiento del servidor echo, se desarrolló un script de validación llamado `validar-echo-server.sh`. Este script automatiza la verificación del servidor mediante un enfoque de prueba de integración que se ejecuta en un entorno aislado. 
+
+El proceso comienza verificando que el contenedor del servidor esté activo. Luego, identifica automáticamente la red Docker donde se encuentra el servidor y crea un contenedor temporal basado en Alpine Linux con netcat (nc) para realizar la prueba. El script envía un mensaje de prueba ("test") al puerto 12345 del servidor y verifica que la respuesta coincida exactamente con el mensaje original.
+
+Para ejecutar la validación, primero es necesario otorgar permisos de ejecución al script con `chmod +x validar-echo-server.sh` y luego ejecutarlo simplemente con `./validar-echo-server.sh`. El script proporciona una salida clara indicando el resultado de la prueba: `action: test_echo_server | result: success` cuando el servidor responde correctamente, o `action: test_echo_server | result: fail` en caso de que el servidor no esté disponible o la respuesta sea incorrecta.
+
+### Ejercicio N°4:
+
+El ejercicio se centró en implementar un cierre controlado (graceful shutdown) tanto para el cliente como para el servidor, asegurando que ambos puedan manejar correctamente las señales de terminación del sistema (SIGTERM y SIGINT). Esta funcionalidad es crucial para garantizar que los recursos del sistema se liberen adecuadamente y que no se pierdan datos durante el cierre de la aplicación.
+
+En el lado del servidor, desarrollado en Python, se implementó un manejador de señales que intercepta las peticiones de terminación. Cuando se recibe una señal de cierre, el servidor establece una bandera `_shutdown` que es constantemente monitoreada por el bucle principal. Antes de finalizar, el método `__graceful_shutdown` se encarga de cerrar de manera segura el socket del servidor, registrar el evento de cierre en los logs y asegurar que todos los recursos del sistema sean liberados correctamente, incluso en caso de errores inesperados.
+
+Por el lado del cliente, implementado en Go, se creó un manejador de señales (`signalHandler`) que captura las señales de interrupción y terminación. Este manejador activa un cierre ordenado de la conexión, registrando el evento en los logs del sistema. La estructura `Client` incluye un método `Close()` que verifica la existencia de la conexión antes de proceder con su cierre, asegurando que no se produzcan errores por intentos de cierre múltiples o en conexiones ya cerradas.
+
+Para probar el correcto funcionamiento del cierre controlado, se puede enviar una señal SIGTERM al contenedor del servidor mientras está en ejecución usando el comando `docker kill -s SIGTERM <container_id_del_servidor>`. Esto permite verificar que tanto el servidor como los clientes manejen adecuadamente la terminación inesperada, cerrando limpiamente las conexiones y liberando los recursos del sistema.
+
+### Ejercicio N°5:
+
+Este ejercicio consistió en diseñar e implementar un protocolo de comunicación binario para el sistema de Lotería Nacional, permitiendo a las agencias de quiniela enviar apuestas al servidor central de manera eficiente y confiable. El protocolo fue diseñado para ser compacto, eficiente y robusto ante posibles problemas de red.
+
+Cada apuesta (representada por la estructura `Bet`) contiene la información del apostador (nombre, apellido, documento, fecha de nacimiento) junto con el número seleccionado. La implementación maneja tanto la serialización de los datos al formato binario como su posterior deserialización, asegurando la correcta codificación de los diferentes tipos de datos.
+
+En el lado del cliente, desarrollado en Go, se implementó una estructura `Protocol` que encapsula toda la lógica de comunicación. Esta estructura incluye métodos especializados para escribir diferentes tipos de datos primitivos (`writeU16`, `writeU32`, `writeStringU16`), así como el método `SendBet` que construye y envía el mensaje completo siguiendo el formato acordado. La recepción de la respuesta del servidor se maneja a través del método `RecvResponse`, que interpreta el código de estado recibido.
+
+El servidor, implementado en Python, incluye su propia clase `Protocol` con métodos complementarios para la recepción de datos (`_recv_u16`, `_recv_u32`, `_recv_string_u16`). El método `recv_bet` se encarga de reconstruir el objeto `Bet` a partir de los datos binarios recibidos, mientras que `send_response` permite enviar la confirmación de recepción al cliente.
+
+Un aspecto clave de la implementación es el manejo robusto de operaciones de red mediante el patrón short-read/short-write. En el cliente, se utiliza `writeAll` para garantizar que todos los bytes sean enviados, reintentando la escritura si es necesario. En el servidor, se implementó `readAll` para leer todos los bytes de la conexión, y un búfer de lectura que acumula datos hasta completar el mensaje, manejando adecuadamente los casos donde `recv` devuelve menos bytes de los solicitados.
+
+El flujo de comunicación sigue un patrón simple pero efectivo: el cliente establece una conexión TCP, envía la apuesta en el formato binario acordado, espera la confirmación del servidor (un byte indicando éxito o fallo) y finalmente cierra la conexión. Este diseño minimiza el tiempo de conexión y simplifica el manejo de concurrencia en el servidor.
+
+La implementación también incluye validaciones exhaustivas de los datos recibidos, verificando tamaños máximos, rangos de valores y la integridad general de los mensajes. En caso de detectar cualquier anomalía, se cierra la conexión de manera segura para evitar estados inconsistentes.
+
+
+### Ejercicio N°6:
+
+En ejercicio se centró en optimizar la transmisión de apuestas mediante la implementación de procesamiento por lotes (batch processing), mejorando significativamente el rendimiento de la aplicación al reducir la sobrecarga de red. Esta mejora permite enviar múltiples apuestas en una sola operación de red, lo que resulta especialmente beneficioso cuando se manejan grandes volúmenes de datos.
+
+El protocolo de comunicación fue extendido para soportar el envío de lotes de apuestas. Cada mensaje comienza con un encabezado de 2 bytes que indica la cantidad de apuestas incluidas, seguido por las apuestas en sí, cada una con el mismo formato binario definido previamente. El servidor responde con un simple byte de estado (éxito o fallo) para todo el lote, asegurando un procesamiento atómico: o todas las apuestas del lote se procesan correctamente o ninguna lo hace.
+
+En la implementación del cliente en Go, se desarrolló la función `EncodeBatch` que se encarga de empaquetar múltiples apuestas en un solo búfer binario, verificando que el tamaño total no exceda el límite establecido de 8KB. La función `SendBatch` maneja el envío completo del lote, asegurando que todos los datos se transmitan correctamente.
+
+Por el lado del servidor en Python, se implementó el método `recv_batch` que deserializa el lote completo, procesa cada apuesta individualmente y devuelve una lista estructurada. El manejador de conexiones fue actualizado para trabajar con estos lotes, mejorando significativamente el rendimiento al reducir la sobrecarga de I/O de red.
+
+Ejemplo de mensaje de batch:
+```
+[2 bytes: cantidad de apuestas] [Apuesta 1] [Apuesta 2] ... [Apuesta N]
+```
+
+### Ejercicio N°7:
+
+En este ejercicio expandimos significativamente el sistema de lotería para soportar múltiples agencias operando de manera concurrente, implementando un protocolo de comunicación robusto que garantiza la integridad de los datos y la sincronización entre los participantes. El sistema está diseñado para esperar a que todas las agencias hayan terminado de enviar sus apuestas antes de proceder con el sorteo, asegurando un proceso justo y ordenado.
+
+El protocolo de comunicación se basa en cuatro tipos principales de mensajes. Cada mensaje comienza con un byte que identifica su tipo, seguido de los datos específicos. El mensaje `HELLO` inicia la comunicación, permitiendo a cada agencia identificarse con su ID único. Los mensajes `BATCH` transportan las apuestas en lotes, mientras que `DONE` indica que una agencia ha terminado de enviar sus apuestas. Finalmente, el mensaje de `RESULTADOS` se utiliza para informar a cada agencia sobre los números ganadores correspondientes a sus apostadores.
+
+El flujo de comunicación sigue una secuencia lógica: primero, cada agencia establece la conexión y se identifica. Luego, puede enviar múltiples lotes de apuestas hasta indicar que ha terminado. El servidor mantiene un registro de todas las agencias activas y solo procede con el sorteo una vez que todas han confirmado que terminaron. Este enfoque garantiza que ninguna apuesta sea excluida del proceso.
+
+El sistema mantiene abiertas las conexiones con todas las agencias durante todo el proceso. Cada agencia establece su conexión al inicio y la mantiene activa hasta recibir los resultados del sorteo. Y mediante una condición que chequea si ya se conectaron todas las agencias, el servidor procede con el sorteo.
+
+El manejo de errores está diseñado para mantener la integridad del sorteo. Si una agencia se desconecta inesperadamente o envía mensajes mal formados, el servidor puede tomar las acciones apropiadas, como registrar el error.
+
+### Ejercicio N°8:
+
+En este ejercicio se implementó un sistema concurrente en el servidor para manejar múltiples agencias de lotería de manera eficiente. La solución utiliza threads de Python junto con mecanismos de sincronización avanzados, incluyendo un monitor personalizado y una barrera, para coordinar el proceso de recolección de apuestas y notificación de ganadores.
+
+Cada vez que una agencia se conecta al servidor, se le asigna un hilo dedicado que manejará todas sus comunicaciones. Esto permite atender a múltiples agencias simultáneamente sin bloquear el hilo principal del servidor. Los hilos se configuran como daemons para asegurar que no impidan la terminación del programa cuando el hilo principal finalice.
+
+Para garantizar la consistencia de los datos, se implementó un monitor (`UtilsMonitor`) que encapsula el acceso a las operaciones de almacenamiento y consulta de apuestas. Este monitor utiliza un `RLock` (reentrant lock) que permite múltiples adquisiciones por parte del mismo hilo, lo que es útil para operaciones anidadas. El monitor proporciona dos métodos principales:
+- `store_bets`: Almacena un lote de apuestas de manera segura, adquiriendo el lock durante la operación.
+- `compute_winners`: Calcula los ganadores de cada agencia, asegurando consistencia en la lectura de los datos.
+
+Uno de los aspectos más importantes de la implementación es el uso de una barrera de sincronización (`threading.Barrier`) que coordina a todas las agencias participantes. Esta barrera se configura con el número total de agencias esperadas y con una acción de callback (`__compute_winners`) que se ejecuta automáticamente cuando la última agencia llega a la barrera. El monitor se encarga de calcular los ganadores de manera atómica, garantizando que el proceso sea seguro para hilos concurrentes.
+Dejé el computo de los ganadores dentro del monitor para que no haya ningún tipo de problema de concurrencia, ni RC's. Igualmente me parece que habiendo puesto de callback a `compute_winners` en la barrera, entiendo que ya no debería de haber ningún tipo de conflicto porque el que ejecuta esa función es un solo hilo, por ende, el resto no debería de acceder a la misma.
+
+La elección de utilizar threads en Python está justificada por la naturaleza I/O-bound de la aplicación. A diferencia de las aplicaciones intensivas en cómputo, donde el Global Interpreter Lock (GIL) de Python podría representar un cuello de botella, en este caso el tiempo de CPU real utilizado para procesar cada mensaje es mínimo. La mayor parte del tiempo, los hilos están esperando operaciones de entrada/salida, como la recepción de mensajes por red o el acceso al disco, momentos durante los cuales el GIL se libera permitiendo que otros hilos se ejecuten. Además, la implementación con threads ofrece ventajas significativas sobre alternativas como multiprocesamiento, incluyendo una menor sobrecarga de memoria (al compartir el mismo espacio de direcciones) y una mayor simplicidad en la implementación y depuración del código.
+
+
+### Verificación del correcto funcionamiento
+Como es de saber la cátedra proporcionó una serie de tests los cuáles podrán ser ejecutados para corroborar el correcto
+funcionamiento de los ejercicios implementados. Para ello debemos de bajar el repositorio:
+- [Repositorio tests](https://github.com/7574-sistemas-distribuidos/tp0-tests)
+
+Para la ejecución de las mismas allí se encontrará un README.md con más detalle al respecto.
