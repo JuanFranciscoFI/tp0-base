@@ -178,3 +178,13 @@ Se espera que se redacte una sección del README en donde se indique cómo ejecu
 Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/tp0-tests) de caja negra. Se exige que la resolución de los ejercicios pase tales pruebas, o en su defecto que las discrepancias sean justificadas y discutidas con los docentes antes del día de la entrega. El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación. Respetar las entradas de log planteadas en los ejercicios, pues son las que se chequean en cada uno de los tests.
 
 La corrección personal tendrá en cuenta la calidad del código entregado y casos de error posibles, se manifiesten o no durante la ejecución del trabajo práctico. Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
+
+## Explicación resolución ejercicios
+
+### Ejercicio N°3:
+
+Para garantizar el correcto funcionamiento del servidor echo, se desarrolló un script de validación llamado `validar-echo-server.sh`. Este script automatiza la verificación del servidor mediante un enfoque de prueba de integración que se ejecuta en un entorno aislado. 
+
+El proceso comienza verificando que el contenedor del servidor esté activo. Luego, identifica automáticamente la red Docker donde se encuentra el servidor y crea un contenedor temporal basado en Alpine Linux con netcat (nc) para realizar la prueba. El script envía un mensaje de prueba ("test") al puerto 12345 del servidor y verifica que la respuesta coincida exactamente con el mensaje original.
+
+Para ejecutar la validación, primero es necesario otorgar permisos de ejecución al script con `chmod +x validar-echo-server.sh` y luego ejecutarlo simplemente con `./validar-echo-server.sh`. El script proporciona una salida clara indicando el resultado de la prueba: `action: test_echo_server | result: success` cuando el servidor responde correctamente, o `action: test_echo_server | result: fail` en caso de que el servidor no esté disponible o la respuesta sea incorrecta.
