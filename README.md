@@ -178,3 +178,17 @@ Se espera que se redacte una sección del README en donde se indique cómo ejecu
 Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/tp0-tests) de caja negra. Se exige que la resolución de los ejercicios pase tales pruebas, o en su defecto que las discrepancias sean justificadas y discutidas con los docentes antes del día de la entrega. El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación. Respetar las entradas de log planteadas en los ejercicios, pues son las que se chequean en cada uno de los tests.
 
 La corrección personal tendrá en cuenta la calidad del código entregado y casos de error posibles, se manifiesten o no durante la ejecución del trabajo práctico. Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
+
+## Explicación resolución ejercicios
+
+### Ejercicio N°1:
+
+El primer ejercicio consistió en desarrollar un script bash llamado `generar-compose.sh` que simplifica la generación de archivos de configuración para Docker Compose. Este script permite crear configuraciones personalizadas con un número variable de clientes, cada uno con su propia configuración de red y dependencias. 
+
+Para utilizarlo, primero es necesario otorgar permisos de ejecución con `chmod +x generar-compose.sh` y luego ejecutarlo especificando el nombre del archivo de salida y la cantidad de clientes deseados. Por ejemplo, para generar una configuración con 3 clientes en un archivo llamado `docker-compose-dev.yaml`, se ejecutaría:
+
+```bash
+./generar-compose.sh docker-compose-dev.yaml 3
+```
+
+Una vez generado, es posible validar la sintaxis del archivo resultante con el comando `docker-compose -f <archivo_generado> config`. El script se encarga de mantener una nomenclatura consistente para los contenedores (client1, client2, etc.) y de configurar correctamente todas las dependencias y redes necesarias para que los servicios se comuniquen entre sí.
