@@ -24,6 +24,13 @@ type Client struct {
 	protocol *Protocol
 }
 
+type Bet struct {
+	Nombre     string
+	Apellido   string
+	Documento  uint32
+	Nacimiento string
+	Numero     uint32
+}
 // NewClient Initializes a new client receiving the configuration
 // as a parameter
 func NewClient(config ClientConfig) *Client {

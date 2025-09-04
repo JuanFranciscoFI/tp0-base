@@ -15,14 +15,6 @@ const (
 	statusFail     = uint8(0x01)
 )
 
-type Bet struct {
-	Nombre     string
-	Apellido   string
-	Documento  uint32
-	Nacimiento string
-	Numero     uint32
-}
-
 func NewProtocol(skt net.Conn) *Protocol {
 	return &Protocol{
 		skt: skt,

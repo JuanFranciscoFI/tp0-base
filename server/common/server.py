@@ -46,10 +46,8 @@ class Server:
 
         except Exception as e:
             logging.error(f"action: apuesta_almacenada | result: fail | error: {e}")
-            try:
-                proto.send_response(ok=False)
-            except Exception:
-                pass
+            proto.send_response(ok=False)
+           
         finally:
             client_sock.close()
 
