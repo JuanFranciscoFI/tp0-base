@@ -22,10 +22,7 @@ class Server:
             self._server_socket.close()
         finally:
             for proto in self._agents_waiting.values():
-                try:
-                    proto.close()
-                except Exception:
-                    pass
+                proto.close()
             logging.info("action: graceful_shutdown | result: success")
 
     def run(self, expected_agencies):
@@ -50,11 +47,8 @@ class Server:
                 if not self._draw_done and len(self._agents_waiting) == expected_agencies:
                     self.broadcast_results()
         finally:
-            try:
-                self._server_socket.close()
-            except Exception:
-                pass
-
+            self._server_socket.close()
+            
     def __handle_client_until_done(self, proto: Protocol):
         agency_id = None
         try:
@@ -84,30 +78,21 @@ class Server:
                     return
 
                 else:
-                    try:
-                        proto.send_ack(False)
-                    except Exception:
-                        pass
+                    proto.send_ack(False)
                     proto.close()
                     return
         except ConnectionError:
             proto.close()
         except Exception as e:
             logging.error(f"action: server_error | error: {e}")
-            try:
-                proto.send_ack(False)
-            except Exception:
-                pass
+            proto.send_ack(False)
             proto.close()
 
     def lottery(self):
         winners_by_agency = defaultdict(list)
         for bet in load_bets():
             if has_won(bet):
-                try:
-                    winners_by_agency[bet.agency].append(int(bet.document))
-                except Exception:
-                    pass
+                winners_by_agency[bet.agency].append(int(bet.document))
         return winners_by_agency
 
     def broadcast_results(self):
@@ -121,10 +106,7 @@ class Server:
             except Exception as e:
                 logging.error(f"action: send_lottery_results | result: fail | agency: {ag_id} | error: {e}")
             finally:
-                try:
-                    proto.close()
-                except Exception:
-                    pass
+                proto.close()
 
         self._agents_waiting.clear()
         self._draw_done = True
