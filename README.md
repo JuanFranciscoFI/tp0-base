@@ -178,3 +178,15 @@ Se espera que se redacte una sección del README en donde se indique cómo ejecu
 Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/tp0-tests) de caja negra. Se exige que la resolución de los ejercicios pase tales pruebas, o en su defecto que las discrepancias sean justificadas y discutidas con los docentes antes del día de la entrega. El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación. Respetar las entradas de log planteadas en los ejercicios, pues son las que se chequean en cada uno de los tests.
 
 La corrección personal tendrá en cuenta la calidad del código entregado y casos de error posibles, se manifiesten o no durante la ejecución del trabajo práctico. Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
+
+## Explicación resolución ejercicios
+
+### Ejercicio N°7:
+
+En este ejercicio expandimos significativamente el sistema de lotería para soportar múltiples agencias operando de manera concurrente, implementando un protocolo de comunicación robusto que garantiza la integridad de los datos y la sincronización entre los participantes. El sistema está diseñado para esperar a que todas las agencias hayan terminado de enviar sus apuestas antes de proceder con el sorteo, asegurando un proceso justo y ordenado.
+
+El protocolo de comunicación se basa en cuatro tipos principales de mensajes. Cada mensaje comienza con un byte que identifica su tipo, seguido de los datos específicos. El mensaje `HELLO` inicia la comunicación, permitiendo a cada agencia identificarse con su ID único. Los mensajes `BATCH` transportan las apuestas en lotes, mientras que `DONE` indica que una agencia ha terminado de enviar sus apuestas. Finalmente, el mensaje de `RESULTADOS` se utiliza para informar a cada agencia sobre los números ganadores correspondientes a sus apostadores.
+
+El flujo de comunicación sigue una secuencia lógica: primero, cada agencia establece la conexión y se identifica. Luego, puede enviar múltiples lotes de apuestas hasta indicar que ha terminado. El servidor mantiene un registro de todas las agencias activas y solo procede con el sorteo una vez que todas han confirmado que terminaron. Este enfoque garantiza que ninguna apuesta sea excluida del proceso.
+
+El sistema mantiene abiertas las conexiones con todas las agencias durante todo el proceso. Cada agencia establece su conexión al inicio y la mantiene activa hasta recibir los resultados del sorteo. Y mediante una condición que chequea si ya se conectaron todas las agencias, el servidor procede con el sorteo.
