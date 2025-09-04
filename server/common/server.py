@@ -52,10 +52,7 @@ class Server:
                 except ConnectionError:
                     break
                 except Exception as e:
-                    try:
-                        proto.send_response(False)
-                    except Exception:
-                        pass
+                    proto.send_response(False)
                     logging.error(f"action: apuesta_recibida | result: fail | cantidad: 0 | error: {e}")
                     break
         finally:
