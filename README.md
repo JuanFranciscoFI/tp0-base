@@ -178,3 +178,15 @@ Se espera que se redacte una sección del README en donde se indique cómo ejecu
 Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/tp0-tests) de caja negra. Se exige que la resolución de los ejercicios pase tales pruebas, o en su defecto que las discrepancias sean justificadas y discutidas con los docentes antes del día de la entrega. El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación. Respetar las entradas de log planteadas en los ejercicios, pues son las que se chequean en cada uno de los tests.
 
 La corrección personal tendrá en cuenta la calidad del código entregado y casos de error posibles, se manifiesten o no durante la ejecución del trabajo práctico. Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
+
+## Explicación resolución ejercicios
+
+### Ejercicio N°4:
+
+El ejercicio se centró en implementar un cierre controlado (graceful shutdown) tanto para el cliente como para el servidor, asegurando que ambos puedan manejar correctamente las señales de terminación del sistema (SIGTERM y SIGINT). Esta funcionalidad es crucial para garantizar que los recursos del sistema se liberen adecuadamente y que no se pierdan datos durante el cierre de la aplicación.
+
+En el lado del servidor, desarrollado en Python, se implementó un manejador de señales que intercepta las peticiones de terminación. Cuando se recibe una señal de cierre, el servidor establece una bandera `_shutdown` que es constantemente monitoreada por el bucle principal. Antes de finalizar, el método `__graceful_shutdown` se encarga de cerrar de manera segura el socket del servidor, registrar el evento de cierre en los logs y asegurar que todos los recursos del sistema sean liberados correctamente, incluso en caso de errores inesperados.
+
+Por el lado del cliente, implementado en Go, se creó un manejador de señales (`signalHandler`) que captura las señales de interrupción y terminación. Este manejador activa un cierre ordenado de la conexión, registrando el evento en los logs del sistema. La estructura `Client` incluye un método `Close()` que verifica la existencia de la conexión antes de proceder con su cierre, asegurando que no se produzcan errores por intentos de cierre múltiples o en conexiones ya cerradas.
+
+Para probar el correcto funcionamiento del cierre controlado, se puede enviar una señal SIGTERM al contenedor del servidor mientras está en ejecución usando el comando `docker kill -s SIGTERM <container_id_del_servidor>`. Esto permite verificar que tanto el servidor como los clientes manejen adecuadamente la terminación inesperada, cerrando limpiamente las conexiones y liberando los recursos del sistema.
