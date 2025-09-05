@@ -62,76 +62,73 @@ func (c *Client) Close() {
 }
 
 func (c *Client) SendBatchesFromDataset() error {
-	if err := c.createClientSocket(); err != nil {
-		return err
-	}
-	defer c.Close()
-	p := c.protocol
+    if err := c.createClientSocket(); err != nil {
+        return err
+    }
+    defer c.Close()
+    p := c.protocol
 
-	aid64, _ := strconv.ParseUint(c.config.ID, 10, 16)
-	if err := p.SendHello(uint16(aid64)); err != nil { return err }
-	if err := p.RecvAck(); err != nil { return err }
-	log.Infof("action: hello | result: success | agency_id: %v", aid64)
+    aid64, _ := strconv.ParseUint(c.config.ID, 10, 16)
+    if err := p.SendHello(uint16(aid64)); err != nil { return err }
+    if err := p.RecvAck(); err != nil { return err }
+    log.Infof("action: hello | result: success | agency_id: %v", aid64)
 
-	f, err := os.Open(c.config.DatasetPath)
-	if err != nil { return err }
-	defer f.Close()
+    f, err := os.Open(c.config.DatasetPath)
+    if err != nil { return err }
+    defer f.Close()
 
-	r := csv.NewReader(f)
-	r.FieldsPerRecord = 5
+    r := csv.NewReader(f)
+    r.FieldsPerRecord = 5
 
-	maxN := c.config.BatchMaxAmount
+    batch := make([]Bet, 0, c.config.BatchMaxAmount)
+    var curSize int
 
-	var (
-		batch   []Bet
-		curSize = 3
-	)
+    flush := func() error {
+        if len(batch) == 0 { return nil }
+        if err := p.SendBatch(batch); err != nil { return err }
+        if err := p.RecvAck(); err != nil { return err }
+        log.Infof("action: apuestas_enviadas | result: success | cantidad: %d", len(batch))
+        batch = batch[:0]
+        curSize = 0
+        return nil
+    }
 
-	flush := func() error {
-		if len(batch) == 0 { return nil }
-		if err := p.SendBatch(batch); err != nil { return err }
-		if err := p.RecvAck(); err != nil { return err }
-		log.Infof("action: apuestas_enviadas | result: success | cantidad: %d", len(batch))
-		batch = batch[:0]
-		curSize = 3
-		return nil
-	}
+    for {
+        rec, err := r.Read()
+        if err == io.EOF { break }
+        if err != nil { return err }
 
-	for {
-		rec, err := r.Read()
-		if err == io.EOF { break }
-		if err != nil { return err }
+        doc64, _ := strconv.ParseUint(rec[2], 10, 32)
+        num64, _ := strconv.ParseUint(rec[4], 10, 32)
+        next := Bet{
+            Nombre:     rec[0],
+            Apellido:   rec[1],
+            Documento:  uint32(doc64),
+            Nacimiento: rec[3],
+            Numero:     uint32(num64),
+        }
 
-		doc64, _ := strconv.ParseUint(rec[2], 10, 32)
-		num64, _ := strconv.ParseUint(rec[4], 10, 32)
-		next := Bet{
-			Nombre:     rec[0],
-			Apellido:   rec[1],
-			Documento:  uint32(doc64),
-			Nacimiento: rec[3],
-			Numero:     uint32(num64),
-		}
+        betSize := sizeOfBet(next)
+        if len(batch) > 0 && (curSize+betSize > maxPacketBytes) {
+            if err := flush(); err != nil { return err }
+        }
+        if len(batch) == cap(batch) {
+            if err := flush(); err != nil { return err }
+        }
 
-		betSize := sizeOfBet(next)
-		if len(batch) > 0 && (curSize+betSize > maxPacketBytes) {
-			if err := flush(); err != nil { return err }
-		}
-		if len(batch) == maxN {
-			if err := flush(); err != nil { return err }
-		}
+        batch = append(batch, next)
+        curSize += betSize
+    }
+    
+    if err := flush(); err != nil { return err }
 
-		batch = append(batch, next)
-		curSize += betSize
-	}
-	if err := flush(); err != nil { return err }
+    if err := p.SendDone(); err != nil { return err }
+    if err := p.RecvAck(); err != nil { return err }
 
-	if err := p.SendDone(); err != nil { return err }
-	if err := p.RecvAck(); err != nil { return err }
+    log.Infof("action: esperando_ganadores | result: in_progress")
+    winners, err := p.RecvWinners()
+    if err != nil { return err }
+    log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", len(winners))
 
-	log.Infof("action: esperando_ganadores | result: in_progress")
-	winners, err := p.RecvWinners()
-	if err != nil { return err }
-	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", len(winners))
-
-	return nil
+    return nil
 }
